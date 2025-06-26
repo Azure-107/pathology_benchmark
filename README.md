@@ -31,6 +31,7 @@ Patching coordinates obtained are in .h5 format with the following structure str
 		└── ...
 ```
 The default `mag` and `patch_size` parameters provided by the Trident framework are used.
+
 # Feature Extraction
 uni model was downloaded from [huggingface](https://huggingface.co/MahmoodLab/UNI) and placed at `Feature_extract/models/ckpts/uni.bin`
 Run
@@ -46,6 +47,8 @@ cd downstream_task/diagnosis_prediction
 bash CCRCC_weightedCE.sh
 ```
 Loss and metrics are logged with weights and biases.
+![curve](assets/CCRCC_curve.png)
+same color represents the results from the same fold. dashed line: naive CE loss; solid line: weighted CE loss
 # Code Modifications: 
 #### Using Trident feature
 - new args: `--encoder_pipeline`. By default is set to `HKUST`, which is the orginal mSTAR implementation. Can also pass the value `Trident` to run ABMIL on features extracted by Trident (stored in `.h5` format).
