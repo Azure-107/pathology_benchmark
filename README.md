@@ -1,5 +1,4 @@
 # Dataset
-## Public
 **Image:** TCIA CCRCC WSIs from [TCIA Cancer Imaging Archive](https://www.cancerimagingarchive.net/collection/cptac-ccrcc/), 245 cases in total
 
 **Split:** Using the first 5 folds of [data split](https://huggingface.co/datasets/MahmoodLab/Patho-Bench/blob/main/cptac_ccrcc/BAP1_mutation/k%3Dall.tsv) provided by [Patho-Bench](https://github.com/mahmoodlab/Patho-Bench) from [Mahmood Lab](https://faisal.ai/). csv file located at `downstream_task/diagnosis_preidction/dataset_csv/CCRCC_5folds.csv`
@@ -7,14 +6,7 @@
 **Task:** BAP1 mutation prediction
 
 ![public](assets/20250624181845.png)
-## Private
-**Image:** Ovarian Cancer WSIs from UHN, 576 cases in total
 
-**Split:** 80-20 train-val data split. csv file located at `downstream_task/diagnosis_preidction/dataset_csv/UHN_5folds.csv`
-
-**Task:** BRCA mutation prediction 
-
-![private](assets/20250624181822.png)
 # Tissue Segmentation and Patching
 Using the [Trident](https://github.com/mahmoodlab/TRIDENT?tab=readme-ov-file) framework from [Mahmood Lab](https://faisal.ai/). 
 Environment Preparation
