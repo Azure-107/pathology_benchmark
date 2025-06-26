@@ -28,5 +28,8 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=2e-4, help="learning rate (default: 0.0001)")
     parser.add_argument("--weight_decay", type=float, default=1e-5, help="weight decay")
     parser.add_argument("--loss", type=str, default="ce", help="slide-level classification loss function (default: ce)")
+
+    # encoder pipeline, HKUST or Trident
+    parser.add_argument("--encoder_pipeline", type=str, default="HKUST", help="encoder pipeline used to extract features from WSI") 
     args = parser.parse_args()
     return args

@@ -1,6 +1,7 @@
 import os
 import csv
 import time
+import wandb
 
 from datasets.Subtyping import Dataset_Subtyping
 from utils.options import parse_args
@@ -20,7 +21,7 @@ def main(args):
     if args.evaluate:
         results_dir = args.resume
     else:
-        results_dir = "./results/results_{seed}/{study}/[{model}]/[{feature}]-[{time}]".format(
+        results_dir = "/mnt/pool/ovariancancer/mSTAR_results/results_{seed}/{study}/[{model}]/[{feature}]-[{time}]".format(
             seed=args.seed,
             study=args.study,
             model=args.model,
@@ -31,14 +32,31 @@ def main(args):
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
     # define dataset
-    dataset = Dataset_Subtyping(root=args.root, csv_file=args.csv_file, feature=args.feature)
+    dataset = Dataset_Subtyping(root=args.root, csv_file=args.csv_file, feature=args.feature, encoder_pipeline=args.encoder_pipeline)
     # training and evaluation
     meter = CV_Meter(dataset.num_folds)
     args.num_classes = dataset.num_classes
     args.n_features = dataset.n_features
     args.num_folds = dataset.num_folds
+    print('[dataset] number of folds: ', args.num_folds)
+    print("[dataset] feature dimension: ", args.n_features)
     for fold in range(dataset.num_folds):
+        # init wand logger for this fold
+        wandb.init(
+            project="HKSTU_pathology",   
+            name=f"{args.study}-fold{fold}-[{time.strftime('%Y-%m-%d-%H-%M')}]",
+            config={
+                "encoder": args.feature,
+                "lr": args.lr,
+                "epochs": args.num_epoch,
+                "weight_decay": args.weight_decay,
+                "scheduler": args.scheduler,
+                "optimizer": args.optimizer,
+            }
+        )
         splits = dataset.get_fold(fold)
+        class_weights = dataset.get_class_weights(splits[0]) # class weight tensor, for weigted CE loss  # get class weights for the training set
+        args.class_weights = class_weights
         loaders = [DataLoader(dataset, batch_size=1, num_workers=4, pin_memory=True, sampler=SubsetRandomSampler(split)) for split in splits]
         # build model, criterion, optimizer, schedular
         #################################################
@@ -47,6 +65,7 @@ def main(args):
             from models.ABMIL.engine import Engine
 
             model = DAttention(n_classes=args.num_classes, dropout=0.25, act="relu", n_features=args.n_features)
+            # model = DAttention(n_classes=args.num_classes, dropout=0.25, act="gelu", n_features=args.n_features)
             engine = Engine(args, results_dir, fold)
         elif args.model == "TransMIL":
             from models.TransMIL.network import TransMIL
@@ -79,10 +98,10 @@ def main(args):
             raise NotImplementedError("model [{}] is not implemented".format(args.model))
         print("[model] trained model: ", args.model)
         criterion = define_loss(args)
-        print("[model] loss function: ", args.loss)
+        print("[model] loss function: ", args.loss) # default: ce
         optimizer = define_optimizer(args, model)
-        print("[model] optimizer: ", args.optimizer, args.lr, args.weight_decay)
-        scheduler = define_scheduler(args, optimizer)
+        print("[model] optimizer: ", args.optimizer, args.lr, args.weight_decay)    # default: Adam, 2e-4, 1e-5
+        scheduler = define_scheduler(args, optimizer)   # default: cosine
         print("[model] scheduler: ", args.scheduler)
         # start training
         if not args.evaluate:
@@ -92,6 +111,7 @@ def main(args):
             else:
                 val_scores, test_scores, best_epoch = engine.learning(model, loaders, criterion, optimizer, scheduler)
                 meter.updata(best_epoch, val_scores, test_scores)
+        wandb.finish()
     if not args.evaluate:
         meter.save(os.path.join(results_dir, "result.csv"))
 

@@ -27,13 +27,13 @@ class DAttention(nn.Module):
         )
 
     def forward(self, x, return_attn=False):
-        feature = self.feature(x)
-        feature = feature.squeeze()
-        A = self.attention(feature)
-        A = torch.transpose(A, -1, -2)  # KxN
-        A = F.softmax(A, dim=-1)  # softmax over N
-        M = torch.mm(A, feature)  # KxL
-        logits = self.classifier(M)
+        feature = self.feature(x)   # [1, N, n_features] -> [1, N, L]
+        feature = feature.squeeze() # [1, N, L] -> [N, L]
+        A = self.attention(feature)    # [N, L] -> [N, K] = [N, 1]
+        A = torch.transpose(A, -1, -2)  # KxN = [1, N]
+        A = F.softmax(A, dim=-1)  # softmax over N, [1, N]
+        M = torch.mm(A, feature)  # [1, N] x [N, L] = [1, L]
+        logits = self.classifier(M) # [1, L] -> [1, n_classes]
         if return_attn:
             return logits, A
         else:

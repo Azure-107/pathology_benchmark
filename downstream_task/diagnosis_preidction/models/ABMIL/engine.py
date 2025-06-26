@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from tqdm import tqdm
+import wandb
 
 from tensorboardX import SummaryWriter
 
@@ -59,6 +60,7 @@ class Engine(object):
         for epoch in range(self.best_epoch, self.args.num_epoch):
             self.epoch = epoch
             if self.args.num_folds > 1:
+                print(">>> fold {} epoch {}".format(self.fold, self.epoch))
                 train_loader, val_loader = loaders
             else:
                 train_loader, val_loader, test_loader = loaders
@@ -123,7 +125,7 @@ class Engine(object):
             print("-------------------------------train epoch {}-------------------------------".format(self.epoch))
 
         for batch_idx, (data_ID, data_WSI, data_Label) in enumerate(dataloader):
-            data_WSI = data_WSI.to(self.device)
+            data_WSI = data_WSI.to(self.device) # [1, #patches, n_features]
             data_Label = F.one_hot(data_Label, num_classes=self.args.num_classes).float().to(self.device)
             logit = model(data_WSI)
             loss = criterion(logit.view(1, -1), data_Label)
@@ -140,6 +142,12 @@ class Engine(object):
         print("loss: {:.4f}".format(loss))
         # calculate metrics
         scores, _ = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
+        #log metrics
+        wandb.log({'train/loss':loss} |
+            {f"train/{k}": v.item() if isinstance(v, torch.Tensor) else v
+            for k, v in scores.items()} 
+            | {"epoch": self.epoch})
+
         return scores
 
     def validate(self, data_loader, model, criterion, status="val"):
@@ -172,6 +180,11 @@ class Engine(object):
             scores, _ = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
         else:
             _, scores = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
+        # log metrics
+        wandb.log({f'{status}/loss':loss} |
+            {f"{status}/{k}": v.item() if isinstance(v, torch.Tensor) else v
+            for k, v in scores.items()} 
+            | {"epoch": self.epoch})
         return scores
 
     def save_checkpoint(self, state):
@@ -195,6 +208,7 @@ class Engine(object):
                 ),
             )
         print("save best model {filename}".format(filename=self.filename_best))
+        os.makedirs(os.path.dirname(self.filename_best), exist_ok=True)
         torch.save(state, self.filename_best)
 
     def metrics(self, logits, labels):

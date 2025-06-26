@@ -162,6 +162,7 @@ if __name__ == '__main__':
 	custom_transformer = get_custom_transformer(args.model)
 	print(custom_transformer)
 	total = len(bags_dataset)
+	print(len(bags_dataset), 'bags found in dataset')
 	
 	# obtain slide_id
 	get_slide_id = lambda idx: bags_dataset[idx].split(args.slide_ext)[0]
@@ -170,7 +171,7 @@ if __name__ == '__main__':
 	all_wsi_paths = find_all_wsi_paths(args.data_slide_dir, args.slide_ext)	
 	for bag_candidate_idx in range(total):
 		slide_id = get_slide_id(bag_candidate_idx)
-		bag_name = slide_id+'.h5'
+		bag_name = slide_id+'_patches.h5'
 		h5_file_path = os.path.join(args.data_h5_dir, 'patches', bag_name)
 		if not os.path.exists(h5_file_path):
 			print(h5_file_path, 'does not exist ...')
@@ -190,7 +191,7 @@ if __name__ == '__main__':
 
 	for index, bag_candidate_idx in enumerate(exist_idxs):
 		slide_id = get_slide_id(bag_candidate_idx)
-		bag_name = slide_id+'.h5'
+		bag_name = slide_id+'_patches.h5'
 		h5_file_path = os.path.join(args.data_h5_dir, 'patches', bag_name)
 		if not os.path.exists(h5_file_path):
 			print(h5_file_path, 'does not exist ...')

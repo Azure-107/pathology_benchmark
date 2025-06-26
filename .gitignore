@@ -5,3 +5,11 @@
 .DS_Store
 /Feature_extract/models/ckpts
 /pretrain*
+
+# Ignore all .sh files
+*.sh
+
+# Ignore all .log files
+*.log
+
+**/launch.json  
