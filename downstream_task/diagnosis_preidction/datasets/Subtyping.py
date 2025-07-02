@@ -27,8 +27,9 @@ class Dataset_Subtyping(data.Dataset):
             self.split = "fixed"
             self.num_folds = 1
         else:
-            self.split = "5foldcv"
-            self.num_folds = 5
+            self.split = "cv"
+            num_folds = self.data.columns.str.startswith("fold").sum()
+            self.num_folds = num_folds
         # convert "label" column to discrete values
         self.data["label"] = pd.Categorical(self.data["label"])
         self.data["label"] = self.data["label"].cat.codes
@@ -59,10 +60,10 @@ class Dataset_Subtyping(data.Dataset):
         print("[dataset] number of cases=%d" % (len(self.cases)))
         print("[dataset] number of classes=%d" % (self.num_classes))
         print("[dataset] number of features=%d" % self.n_features)
-        if self.split == "5foldcv":
+        if self.split == "cv":
             self.train = []
             self.test = []
-            for fold in range(5):
+            for fold in range(self.num_folds):
                 split = self.data["fold{}".format(fold + 1)].values.tolist()
                 train_split = [i for i, x in enumerate(split) if x == "train"]
                 test_split = [i for i, x in enumerate(split) if x == "test"]
@@ -81,8 +82,8 @@ class Dataset_Subtyping(data.Dataset):
             assert fold == 0, "fold should be 0"
             print("[fetch *] training split: {}, validation split: {}, test split: {}".format(len(self.train), len(self.val), len(self.test)))
             return self.train, self.val, self.test
-        elif self.split == "5foldcv":
-            assert 0 <= fold <= 4, "fold should be in 0 ~ 4"
+        elif self.split == "cv":
+            assert fold >= 0, "fold should be greater than 0"
             print("[fetch *] fold %d, training split: %d, test split: %d" % (fold, len(self.train[fold]), len(self.test[fold])))
             return self.train[fold], self.test[fold]
         

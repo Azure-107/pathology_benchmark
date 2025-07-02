@@ -11,6 +11,8 @@ from torchmetrics.wrappers.bootstrapping import BootStrapper
 from torchmetrics.classification import MulticlassAccuracy
 from torchmetrics.classification.f_beta import F1Score
 from torchmetrics import AUROC
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn.functional as F
@@ -180,11 +182,20 @@ class Engine(object):
             scores, _ = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
         else:
             _, scores = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
+        # calculate confusion matrix
+        cm = confusion_matrix(all_labels.argmax(axis=1), all_logits.argmax(axis=1), labels=[0, 1])
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["WT", "Mutation"])
+        disp.plot(cmap=plt.cm.Blues)
+        plt.title("Confusion Matrix at epoch {}".format(self.epoch))
+        plt.tight_layout()        
         # log metrics
         wandb.log({f'{status}/loss':loss} |
             {f"{status}/{k}": v.item() if isinstance(v, torch.Tensor) else v
-            for k, v in scores.items()} 
+            for k, v in scores.items()} |
+            {'confusion_matrix': wandb.Image(plt)} 
             | {"epoch": self.epoch})
+        plt.close()
+        
         return scores
 
     def save_checkpoint(self, state):
