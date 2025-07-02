@@ -12,4 +12,8 @@
 # Ignore all .log files
 *.log
 
+# Ignore all UHN files
+*[Uu][Hh][Nn]*
+*TGH*
+
 **/launch.json  
