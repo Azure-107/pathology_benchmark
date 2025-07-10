@@ -13,6 +13,9 @@ from torchmetrics.classification.f_beta import F1Score
 from torchmetrics import AUROC
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+import pandas as pd
+import seaborn as sns
 
 import torch
 import torch.nn.functional as F
@@ -42,21 +45,23 @@ class Engine(object):
         if self.args.resume is not None:
             if os.path.isfile(self.args.resume):
                 print("=> loading checkpoint '{}'".format(self.args.resume))
-                checkpoint = torch.load(self.args.resume)
+                checkpoint = torch.load(self.args.resume)   # dict, dict_keys(['best_epoch', 'state_dict', 'val_scores'])
                 self.val_scores = checkpoint["val_scores"]
                 self.best_epoch = checkpoint["best_epoch"]
+                self.epoch = self.best_epoch
                 if "test_score" in checkpoint:
                     self.test_scores = checkpoint["test_scores"]
                 model.load_state_dict(checkpoint["state_dict"])
-                print("=> loaded checkpoint (val score: {})".format(checkpoint["val_score"]["Macro_AUC"]))
+                print("=> loaded checkpoint (val macro AUC score: {})".format(checkpoint["val_scores"]["Macro_AUC"]))
+                print("=> val metrics:", checkpoint["val_scores"])
                 if self.test_scores is not None:
                     print("=> loaded checkpoint (test score: {})".format(checkpoint["test_score"]["Macro_AUC"]))
             else:
                 print("=> no checkpoint found at '{}'".format(self.args.resume))
 
         if self.args.evaluate:
-            loader = loaders[-1]
-            self.test_scores = self.validate(loader, model, criterion)
+            loader = loaders[-1]    # test_loader
+            self.test_scores = self.validate(loader, model, criterion, status="test")
             return self.test_scores
 
         for epoch in range(self.best_epoch, self.args.num_epoch):
@@ -126,11 +131,17 @@ class Engine(object):
             dataloader = data_loader
             print("-------------------------------train epoch {}-------------------------------".format(self.epoch))
 
+        pooled_features = []
+        slide_labels = []
+
         for batch_idx, (data_ID, data_WSI, data_Label) in enumerate(dataloader):
             data_WSI = data_WSI.to(self.device) # [1, #patches, n_features]
             data_Label = F.one_hot(data_Label, num_classes=self.args.num_classes).float().to(self.device)
-            logit = model(data_WSI)
+            logit, pooled_feat = model(data_WSI, return_embedding=True)  # [1, n_classes], [1, n_features]
             loss = criterion(logit.view(1, -1), data_Label)
+            # collect pooled features and labels for each slide
+            pooled_features.append(pooled_feat)
+            slide_labels.append(data_Label.argmax(dim=1).item())
             # results
             all_labels = np.row_stack((all_labels, data_Label.cpu().numpy()))
             all_logits = np.row_stack((all_logits, torch.softmax(logit, dim=-1).detach().cpu().numpy()))
@@ -150,6 +161,22 @@ class Engine(object):
             for k, v in scores.items()} 
             | {"epoch": self.epoch})
 
+        # tsne feature visualization
+        pooled_features = np.stack(pooled_features)  # (N_slides, feature_dim)
+        slide_labels = np.array(slide_labels)   # (N_slides,)
+        # t-SNE projection
+        features_tsne = TSNE(n_components=2, perplexity=5, random_state=42).fit_transform(pooled_features)
+        df = pd.DataFrame({
+            "TSNE1": features_tsne[:, 0],
+            "TSNE2": features_tsne[:, 1],
+            "Label": slide_labels
+        })
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(data=df, x="TSNE1", y="TSNE2", hue="Label", palette=["#1f77b4", "#ff7f0e"], s=60)
+        plt.title(f"t-SNE of Pooled Features (Training) at Epoch {self.epoch}")
+        plt.tight_layout()
+        wandb.log({f"train/tsne": wandb.Image(plt), "epoch": self.epoch})
+        plt.close()    
         return scores
 
     def validate(self, data_loader, model, criterion, status="val"):
@@ -164,12 +191,19 @@ class Engine(object):
             dataloader = data_loader
             print("-------------------------------{} epoch {}-------------------------------".format(status, self.epoch))
 
+        pooled_features = []
+        slide_labels = []
+
         for batch_idx, (data_ID, data_WSI, data_Label) in enumerate(dataloader):
+            print(data_ID)
             data_WSI = data_WSI.to(self.device)
             data_Label = F.one_hot(data_Label, num_classes=self.args.num_classes).float().to(self.device)
             with torch.no_grad():
-                logit = model(data_WSI)
+                logit, pooled_feat = model(data_WSI, return_embedding=True)
                 loss = criterion(logit.view(1, -1), data_Label)
+            # collect pooled features and labels for each slide
+            pooled_features.append(pooled_feat)
+            slide_labels.append(data_Label.argmax(dim=1).item())
             # results
             all_labels = np.row_stack((all_labels, data_Label.cpu().numpy()))
             all_logits = np.row_stack((all_logits, torch.softmax(logit, dim=-1).detach().cpu().numpy()))
@@ -181,7 +215,7 @@ class Engine(object):
         if status == "val":
             scores, _ = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
         else:
-            _, scores = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
+            scores, scores_bootstrapped = self.metrics(torch.from_numpy(all_logits).to(self.device), torch.from_numpy(all_labels).argmax(dim=1).to(self.device))
         # calculate confusion matrix
         cm = confusion_matrix(all_labels.argmax(axis=1), all_logits.argmax(axis=1), labels=[0, 1])
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["WT", "Mutation"])
@@ -194,6 +228,23 @@ class Engine(object):
             for k, v in scores.items()} |
             {'confusion_matrix': wandb.Image(plt)} 
             | {"epoch": self.epoch})
+        plt.close()
+
+        # tsne feature visualization
+        pooled_features = np.stack(pooled_features)  # (N_slides, feature_dim)
+        slide_labels = np.array(slide_labels)   # (N_slides,)
+        # t-SNE projection
+        features_tsne = TSNE(n_components=2, perplexity=5, random_state=42).fit_transform(pooled_features)
+        df = pd.DataFrame({
+            "TSNE1": features_tsne[:, 0],
+            "TSNE2": features_tsne[:, 1],
+            "Label": slide_labels
+        })
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(data=df, x="TSNE1", y="TSNE2", hue="Label", palette=["#1f77b4", "#ff7f0e"], s=60)
+        plt.title(f"t-SNE of Pooled Features at Epoch {self.epoch}")
+        plt.tight_layout()
+        wandb.log({f"{status}/tsne": wandb.Image(plt), "epoch": self.epoch})
         plt.close()
         
         return scores

@@ -26,7 +26,7 @@ class DAttention(nn.Module):
             nn.Linear(self.L * self.K, n_classes),
         )
 
-    def forward(self, x, return_attn=False):
+    def forward(self, x, return_attn=False, return_embedding=False):
         feature = self.feature(x)   # [1, N, n_features] -> [1, N, L]
         feature = feature.squeeze() # [1, N, L] -> [N, L]
         A = self.attention(feature)    # [N, L] -> [N, K] = [N, 1]
@@ -34,7 +34,9 @@ class DAttention(nn.Module):
         A = F.softmax(A, dim=-1)  # softmax over N, [1, N]
         M = torch.mm(A, feature)  # [1, N] x [N, L] = [1, L]
         logits = self.classifier(M) # [1, L] -> [1, n_classes]
-        if return_attn:
+        if return_embedding:
+            return logits, M.detach().cpu().squeeze(0).numpy()  # [L,]
+        elif return_attn:
             return logits, A
         else:
             return logits
