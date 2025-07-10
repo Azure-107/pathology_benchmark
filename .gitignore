@@ -13,8 +13,9 @@
 *.log
 
 # Ignore all UHN files
-/downstream_task/diagnosis_prediction/dataset_csv/UHN*
+/downstream_task/diagnosis_preidction/dataset_csv/UHN*
 *UHN*
+UHN*
 *TGH*
 
 **/launch.json  
